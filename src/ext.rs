@@ -29,6 +29,7 @@ pub(crate) trait MethodExt {
     fn is_http10(&self) -> bool;
     #[cfg(feature = "client")]
     fn is_http11(&self) -> bool;
+    #[cfg(feature = "client")]
     fn need_request_body(&self) -> bool;
     fn allow_request_body(&self) -> bool;
     #[cfg(feature = "client")]
@@ -51,6 +52,7 @@ impl MethodExt for Method {
             || self == Method::PATCH
     }
 
+    #[cfg(feature = "client")]
     fn need_request_body(&self) -> bool {
         self == Method::POST || self == Method::PUT || self == Method::PATCH
     }
