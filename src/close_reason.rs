@@ -3,6 +3,7 @@
 /// This enum represents the various reasons why an HTTP connection might need
 /// to be closed after a request/response cycle is complete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CloseReason {
     /// Client sent `connection: close`.
     ClientConnectionClose,
@@ -30,11 +31,15 @@ pub enum CloseReason {
     /// We do not know how much body data to receive. The socket will be closed
     /// when it's done. This is HTTP/1.0 semantics.
     CloseDelimitedBody,
+
+    /// Server responded before receiving the entire request body.
+    UnreadRequestBody,
 }
 
 impl CloseReason {
     pub(crate) fn explain(&self) -> &'static str {
         match self {
+            CloseReason::UnreadRequestBody => "request body was not fully received",
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
             CloseReason::Not100Continue => "non-100 response before body",
