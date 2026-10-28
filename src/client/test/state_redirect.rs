@@ -180,7 +180,8 @@ fn last_location_header() {
 
 #[test]
 fn change_redirect_methods() {
-    const METHOD_CHANGES: &[(StatusCode, &[(Method, Option<Method>)])] = &[
+    type MethodChanges = (StatusCode, &'static [(Method, Option<Method>)]);
+    const METHOD_CHANGES: &[MethodChanges] = &[
         (
             StatusCode::FOUND,
             &[
