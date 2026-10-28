@@ -580,7 +580,7 @@ mod tests {
     }
 
     #[test]
-    fn head_response_with_body_fails() {
+    fn head_response_with_representation_length() {
         let mut reply = Reply::new().unwrap();
 
         // Receive HEAD request
@@ -607,9 +607,15 @@ mod tests {
             .body(())
             .unwrap();
 
-        reply
-            .provide(response)
-            .expect_err("no body allowed on HEAD response");
+        let mut reply = reply.provide(response).unwrap();
+        let mut output = [0; 1024];
+        let n = reply.write(&mut output).unwrap();
+        assert!(
+            str::from_utf8(&output[..n])
+                .unwrap()
+                .contains("content-length: 1000\r\n")
+        );
+        assert!(matches!(reply.proceed(), SendResponseResult::Cleanup(_)));
     }
 
     #[test]
