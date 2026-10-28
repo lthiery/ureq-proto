@@ -5,7 +5,9 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, header};
 
 use crate::Error;
 use crate::chunk::Dechunker;
-use crate::util::{Writer, compare_lowercase_ascii, log_data};
+#[cfg(feature = "client")]
+use crate::util::compare_lowercase_ascii;
+use crate::util::{Writer, log_data};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct BodyWriter {
@@ -276,19 +278,29 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
+        // Validate framing even when the method makes us ignore the body.
+        let chunked = request_transfer_encoding(headers)?;
+        let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
+
+        if chunked && http10 {
+            // RFC 9112 section 6.1: Transfer-Encoding in HTTP/1.0 is faulty framing.
+            return Err(Error::TransferEncodingInHttp10);
+        }
+
+        if chunked && content_length.is_some() {
+            return Err(Error::TransferEncodingWithContentLength);
+        }
+
         if !method.allow_request_body() && !force_send {
             return Ok(Self::NoBody);
         }
 
-        let ret = Self::header_defined(http10, headers)?.unwrap_or_else(|| {
-            if !http10 && method.need_request_body() {
-                Self::Chunked(Dechunker::new())
-            } else {
-                Self::NoBody
-            }
-        });
-
-        Ok(ret)
+        Ok(match content_length {
+            _ if chunked => Self::Chunked(Dechunker::new()),
+            Some(len) => Self::LengthDelimited(len),
+            None if !http10 && method.need_request_body() => Self::Chunked(Dechunker::new()),
+            None => Self::NoBody,
+        })
     }
 
     #[cfg(feature = "client")]
@@ -321,6 +333,7 @@ impl BodyReader {
         }
     }
 
+    #[cfg(feature = "client")]
     fn header_defined(http10: bool, headers: &HeaderMap) -> Result<Option<Self>, Error> {
         let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
 
@@ -572,6 +585,80 @@ fn trim_ows(mut b: &[u8]) -> &[u8] {
         b = rest;
     }
     b
+}
+
+/// Validate the `Transfer-Encoding` of a request across all of its header lines.
+///
+/// Returns whether the request body is chunked. The only coding we decode is
+/// `chunked`, and RFC 9112 section 6.1 requires it to be the final coding of a
+/// request, applied once and without parameters. Any other coding before it is
+/// reported as [`Error::UnsupportedTransferCoding`] so the caller can answer
+/// 501 (RFC 9112 section 6.1). Empty list elements are ignored (RFC 9110
+/// section 5.6.1.2), but at least one coding is required.
+#[cfg(feature = "server")]
+fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
+    let mut chunked = false;
+    let mut unsupported = false;
+
+    for value in headers.get_all(header::TRANSFER_ENCODING) {
+        for element in value.as_bytes().split(|b| *b == b',') {
+            let element = trim_ows(element);
+            if element.is_empty() {
+                continue;
+            }
+            if chunked {
+                // chunked was not the final coding.
+                return Err(Error::BadTransferEncodingHeader);
+            }
+
+            let name_len = element.iter().take_while(|b| is_token(**b)).count();
+            if name_len == 0 {
+                return Err(Error::BadTransferEncodingHeader);
+            }
+            let (name, params) = element.split_at(name_len);
+
+            if name.eq_ignore_ascii_case(b"chunked") {
+                if !trim_ows(params).is_empty() {
+                    return Err(Error::BadTransferEncodingHeader);
+                }
+                chunked = true;
+            } else {
+                unsupported = true;
+            }
+        }
+    }
+
+    // A header without any coding is as ambiguous as one not ending in chunked.
+    if headers.contains_key(header::TRANSFER_ENCODING) && !chunked {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    if unsupported {
+        return Err(Error::UnsupportedTransferCoding);
+    }
+
+    Ok(chunked)
+}
+
+#[cfg(feature = "server")]
+fn is_token(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+        || matches!(
+            b,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
 }
 
 #[cfg(test)]
