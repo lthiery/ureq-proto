@@ -15,6 +15,10 @@ pub enum Error {
     BadHostHeader,
     BadAuthorizationHeader,
     BadContentLengthHeader,
+    BadTransferEncodingHeader,
+    TransferEncodingWithContentLength,
+    TransferEncodingInHttp10,
+    UnsupportedTransferCoding,
     OutputOverflow,
     ChunkLenNotAscii,
     ChunkLenNotANumber,
@@ -52,6 +56,23 @@ impl fmt::Display for Error {
             Error::BadHostHeader => write!(f, "host header is not a string"),
             Error::BadAuthorizationHeader => write!(f, "authorization header is not a string"),
             Error::BadContentLengthHeader => write!(f, "content-length header not a number"),
+            Error::BadTransferEncodingHeader => write!(
+                f,
+                "invalid request transfer-encoding; final coding must be chunked"
+            ),
+            Error::TransferEncodingInHttp10 => {
+                write!(f, "HTTP/1.0 request contains transfer-encoding")
+            }
+            Error::UnsupportedTransferCoding => {
+                write!(
+                    f,
+                    "request transfer-encoding has a coding other than chunked"
+                )
+            }
+            Error::TransferEncodingWithContentLength => write!(
+                f,
+                "request contains both transfer-encoding and content-length"
+            ),
             Error::OutputOverflow => write!(f, "output too small to write output"),
             Error::ChunkLenNotAscii => write!(f, "chunk length is not ascii"),
             Error::ChunkLenNotANumber => write!(f, "chunk length cannot be read as a number"),
