@@ -286,3 +286,26 @@ fn forbidden_status_body_headers_still_rejected() {
         }
     }
 }
+
+#[test]
+fn zero_length_response_body_is_finished() {
+    let scenario = Scenario::builder().get("/").build();
+    let response = Response::builder()
+        .status(200)
+        .header("content-length", "0")
+        .body(())
+        .unwrap();
+    let mut reply = scenario.to_provide_response().provide(response).unwrap();
+    reply.write(&mut [0; 1024]).unwrap();
+    let crate::server::SendResponseResult::SendBody(mut reply) = reply.proceed() else {
+        panic!("expected SendBody")
+    };
+    assert!(reply.is_finished());
+    assert_eq!(
+        reply.write(b"x", &mut [0; 16]),
+        Err(Error::BodyContentAfterFinish)
+    );
+    // The empty write that ends a body is still accepted.
+    assert_eq!(reply.write(&[], &mut [0; 16]).unwrap(), (0, 0));
+    assert!(!reply.proceed().must_close_connection());
+}

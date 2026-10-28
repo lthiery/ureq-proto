@@ -47,7 +47,8 @@ impl BodyWriter {
     pub fn new_sized(size: u64) -> Self {
         BodyWriter {
             mode: SenderMode::Sized(size),
-            ended: false,
+            // A zero-length body has nothing left to send.
+            ended: size == 0,
         }
     }
 
