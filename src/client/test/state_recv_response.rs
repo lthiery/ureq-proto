@@ -281,18 +281,15 @@ fn switching_protocols_101_returned() {
         crate::client::RecvResponseResult::RecvBody(call) => call
             .inner
             .close_reason
-            .iter()
-            .any(|r| *r == crate::CloseReason::ProtocolSwitch),
+            .contains(&crate::CloseReason::ProtocolSwitch),
         crate::client::RecvResponseResult::Redirect(call) => call
             .inner
             .close_reason
-            .iter()
-            .any(|r| *r == crate::CloseReason::ProtocolSwitch),
+            .contains(&crate::CloseReason::ProtocolSwitch),
         crate::client::RecvResponseResult::Cleanup(call) => call
             .inner
             .close_reason
-            .iter()
-            .any(|r| *r == crate::CloseReason::ProtocolSwitch),
+            .contains(&crate::CloseReason::ProtocolSwitch),
     };
     assert!(
         has_protocol_switch,

@@ -243,8 +243,7 @@ fn switching_protocols_101_stops_body_send() {
     assert!(
         inner
             .close_reason
-            .iter()
-            .any(|r| *r == crate::CloseReason::ProtocolSwitch),
+            .contains(&crate::CloseReason::ProtocolSwitch),
         "Should have ProtocolSwitch close reason"
     );
 
